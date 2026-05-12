@@ -1,6 +1,6 @@
 Create a fully branded Propellic document about: $ARGUMENTS
 
-Write a Python script using python-docx and run it to generate an actual .docx file optimized for upload to Google Docs. Save it to the current working directory with a descriptive kebab-case filename. After running, print the full file path.
+Write a Python script using python-docx and run it to generate an actual .docx file, then immediately upload it to Google Drive as a Google Doc. Use the shebang `#!/Users/javierhernandez/hotel-faq/venv/bin/python3` so the script runs with the venv that has google-api-python-client installed. Save the .docx to the current working directory with a descriptive kebab-case filename.
 
 The logo file is at: propellic-logo-dark.png (in the current working directory — pink flame + Midnight wordmark, transparent background, works on white).
 
@@ -323,5 +323,36 @@ def add_footer():
 
 Using this pattern, build a complete document for: $ARGUMENTS
 
-Call add_footer() once at the end before saving.
-After saving, print: "File saved: <full path>"
+Call add_footer() once at the end before saving. After saving, immediately upload to Google Drive using this pattern — do NOT use the Google Drive MCP tool for this, it cannot handle binary uploads:
+
+```python
+import subprocess, sys
+
+DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+GDOC_MIME = 'application/vnd.google-apps.document'
+TOKEN_PATH = os.path.expanduser('~/hotel-faq/token.json')
+VENV_PYTHON = '/Users/javierhernandez/hotel-faq/venv/bin/python3'
+
+# If running outside the venv, re-exec with it
+if sys.executable != VENV_PYTHON and os.path.exists(VENV_PYTHON):
+    os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
+
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+creds = Credentials.from_authorized_user_file(TOKEN_PATH)
+if creds.expired and creds.refresh_token:
+    creds.refresh(Request())
+
+service = build('drive', 'v3', credentials=creds)
+media = MediaFileUpload(out_path, mimetype=DOCX_MIME, resumable=False)
+file_meta = {'name': doc_title, 'mimeType': GDOC_MIME}
+uploaded = service.files().create(body=file_meta, media_body=media, fields='id').execute()
+file_id = uploaded['id']
+print(f"File saved: {out_path}")
+print(f"Google Doc: https://docs.google.com/document/d/{file_id}/edit")
+```
+
+Set `doc_title` to a human-readable title string (e.g. `"Propellic — Guide to Cats"`) before the upload block. Run the script with plain `python3` — the re-exec handles switching to the venv automatically.
