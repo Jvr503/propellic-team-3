@@ -1,6 +1,6 @@
 Create a fully branded Propellic spreadsheet for: $ARGUMENTS
 
-Write a Python script using openpyxl and run it to generate an actual .xlsx file. Save it to the current working directory with a descriptive kebab-case filename. After running, print the full file path.
+Write a Python script using openpyxl and run it to generate an actual .xlsx file, then immediately upload it to Google Drive as a Google Sheet. Use the shebang `#!/Users/javierhernandez/hotel-faq/venv/bin/python3` so the script runs with the venv that has google-api-python-client installed. Save the .xlsx to the current working directory with a descriptive kebab-case filename.
 
 ---
 
@@ -101,4 +101,38 @@ Think carefully about:
 - Where conditional formatting adds the most value
 - What summary calculations belong on the Summary tab
 
-After the script runs successfully, print: "File saved: <full path>"
+After saving, immediately upload to Google Drive — do NOT use the Google Drive MCP tool, it cannot handle binary uploads:
+
+```python
+import os, sys
+
+XLSX_MIME    = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+GSHEET_MIME  = 'application/vnd.google-apps.spreadsheet'
+TOKEN_PATH   = os.path.expanduser('~/hotel-faq/token.json')
+VENV_PYTHON  = '/Users/javierhernandez/hotel-faq/venv/bin/python3'
+
+if sys.executable != VENV_PYTHON and os.path.exists(VENV_PYTHON):
+    os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
+
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+creds = Credentials.from_authorized_user_file(TOKEN_PATH)
+if creds.expired and creds.refresh_token:
+    creds.refresh(Request())
+
+service  = build('drive', 'v3', credentials=creds)
+media    = MediaFileUpload(out_path, mimetype=XLSX_MIME, resumable=False)
+uploaded = service.files().create(
+    body={'name': sheet_title, 'mimeType': GSHEET_MIME},
+    media_body=media,
+    fields='id'
+).execute()
+
+print(f"File saved: {out_path}")
+print(f"Google Sheet: https://docs.google.com/spreadsheets/d/{uploaded['id']}/edit")
+```
+
+Set `sheet_title` to a human-readable string (e.g. `"Propellic — Kartrite Keyword Tracker"`) before the upload block. Run with plain `python3` — the re-exec handles switching to the venv automatically.
